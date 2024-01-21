@@ -1,11 +1,405 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
+<!-- command to deploy app:- firebase deploy -->
+
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Document</title>
+    <title>Daily Task</title>
+    <link rel="icon" type="image/png" href="./dt.png?" />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons">
+    <link href="https://stackpath.bootstrapcdn.com/bootstrap/5.0.0-alpha1/css/bootstrap.min.css" rel="stylesheet"
+        integrity="sha384-r4NyP46KrjDleawBgD5tp8Y7UzmLA05oM1iAEQ17CSuDqnUK2+k9luXQOfXJCJ4I" crossorigin="anonymous">
+
+    <style>
+        body {
+            background-color: #F6F4F2;
+        }
+
+        .group {
+            min-height: 100vh;
+        }
+
+        input:hover {
+            box-shadow: 0 0 5px 5px #ffffff;
+        }
+
+        li {
+            background-color: #343a40;
+            margin-bottom: 2px;
+        }
+
+        li:hover {
+            margin-top: 5px;
+            margin-bottom: 5px;
+            box-shadow: 0 0 5px 5px #ffffff;
+            font-style: italic;
+            background-color: #ffffff;
+        }
+
+        li:hover a {
+            cursor: pointer;
+            color: black;
+        }
+
+        .date {
+            width: 25px;
+        }
+
+        input[type="date"]::-webkit-calendar-picker-indicator {
+            filter: invert(1);
+        }
+
+        .normal {
+            color: #00ffff;
+        }
+
+        .warning {
+            color: yellow;
+        }
+
+        .danger {
+            color: red;
+        }
+    </style>
 </head>
+
 <body>
-    <h1>Daily Task</h1>
+
+    <div class="container-fluid">
+        <div class="row mt-3">
+            <div class="col-3 bg-dark rounded group text-center">
+                <h3 class="text-white">Hello Nishant</h3>
+                <h6 class="text-white" id="gwei"></h6>
+                <input type="text" id="groupInput" class="form-control my-2" placeholder="Add Group">
+                <hr class="text-white">
+                <ul id="sidebar" class="list-unstyled">
+                </ul>
+            </div>
+            <div class="col-9 rounded bg-secondary">
+                <input type="text" id="urlInput" class="form-control my-2"
+                    placeholder="Paste Url and then press Enter key">
+                <hr>
+                <ul id="urlList" class="list-unstyled">
+
+                </ul>
+            </div>
+        </div>
+    </div>
+    <script type="module">
+        // Import the functions you need from the SDKs you need
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+        import { getDatabase, ref, child, get, push, set, update, remove } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+        const firebaseConfig = {
+            apiKey: "AIzaSyAJSpQPp0ls-xK8YShFEX75VRHWkzYCCZg",
+            authDomain: "dailytask-2dd88.firebaseapp.com",
+            databaseURL: "https://dailytask-2dd88-default-rtdb.firebaseio.com",
+            projectId: "dailytask-2dd88",
+            storageBucket: "dailytask-2dd88.appspot.com",
+            messagingSenderId: "262250599266",
+            appId: "1:262250599266:web:fae89e66228ad3418dd23b",
+            measurementId: "G-2254PBYC96"
+        };
+
+        // Initialize Firebase
+        const app = initializeApp(firebaseConfig);
+        const db = getDatabase(app);
+        // Reference to the tasks collection
+        let selectedGroup = localStorage.getItem("group") || null;
+        let listOfKeys = [];
+        let listOfUrls = [];
+
+
+        //sidebar
+        let groupInput = document.getElementById("groupInput");
+        groupInput.addEventListener("keyup", async function (event) {
+            if (groupInput.value == null || groupInput.value.trim() == "") {
+                return
+            }
+            if (event.keyCode === 13) {
+                event.preventDefault();
+                await set(ref(db, `groups/${groupInput.value.toUpperCase()}`), false)
+                groupInput.value = "";
+                loadGroup();
+            }
+        });
+        async function loadGroup() {
+            const querySnapshot = await get(ref(db, "groups"));
+            let sidebar = document.getElementById("sidebar");
+            sidebar.innerHTML = "";
+            querySnapshot.forEach((item) => {
+                let li = document.createElement("li");
+                li.className = "d-flex justify-content-between align-items-center mb-2 text-white bg-dark rounded"
+                let button = document.createElement("button");
+                button.className = "btn btn-danger"
+                button.innerHTML = '<i class="material-icons">delete</i>'
+                if (selectedGroup == item.key) {
+                    li.className = "d-flex justify-content-between align-items-center bg-secondary mb-2 font-weight-bold text-white rounded";
+                }
+                button.addEventListener('click', async () => {
+                    let confirmation = prompt("Warning!! All the Urls in this group will be deleted. Please write groupname to delete")
+                    if (confirmation.toUpperCase() == item.key) {
+                        await remove(ref(db, `groups/${item.key}`))
+                        await remove(ref(db, `tasks/${item.key}`))
+                        localStorage.removeItem("group")
+                        loadUrl();
+                    } else {
+                        alert("Groupname did not match")
+                    }
+                })
+
+                li.textContent = item.key;
+                if (item.val() == true) {
+                    li.classList.add("text-decoration-line-through")
+                }
+                li.appendChild(button);
+                sidebar.appendChild(li);
+
+                li.addEventListener('click', async (event) => {
+                    if (event.ctrlKey) {
+                        await set(ref(db, `groups/${item.key}`), !item.val())
+                        loadGroup();
+                        return;
+                    }
+                    selectedGroup = item.key;
+                    localStorage.setItem("group", item.key);
+                    loadGroup()
+                    loadUrl();
+                })
+            });
+        }
+
+        loadGroup();
+        loadUrl();
+        getGas();
+        setInterval(getGas, 15000);
+
+        //input urls
+        let urlInput = document.getElementById("urlInput");
+        urlInput.addEventListener("keyup", async function (event) {
+            if (urlInput.value == null || urlInput.value.trim() == "") {
+                return;
+            }
+            if (selectedGroup == null || selectedGroup.trim() == "") {
+                alert("Please Select Group First");
+                return;
+            }
+            if (event.keyCode === 13) {
+                event.preventDefault();
+                let urlVal = urlInput.value;
+                if (urlVal.indexOf('{') >= 0) {
+                    urlVal = saveVariable(urlVal);
+                }
+                if (checkIfExists(urlVal) == false) {
+                    await push(ref(db, `tasks/${selectedGroup}`), {
+                        "url": urlVal,
+                        "completed": false,
+                        "endDate": ''
+                    })
+                }
+                urlInput.value = "";
+                loadUrl();
+            }
+        });
+        async function loadUrl() {
+            let today = new Date().getTime();
+            listOfKeys = []
+            listOfUrls = []
+            const querySnapshot = await get(ref(db, `tasks/${selectedGroup}`));
+            urlList.innerHTML = "";
+
+            if (querySnapshot.exists()) {
+                let ulrList = document.getElementById("urlList");
+                let li = document.createElement("div");
+                li.className = "d-flex justify-content-center align-items-center";
+                let button = document.createElement("button");
+                button.className = "btn btn-sm btn-success mb-1";
+                button.innerText = 'Open All Urls';
+                button.addEventListener('click', () => openUrls())
+                li.appendChild(button);
+                urlList.appendChild(li);
+            }
+            querySnapshot.forEach((item) => {
+                listOfKeys.push(item.key);
+                listOfUrls.push(item.val());
+                let li = document.createElement("li");
+                li.className = "d-flex justify-content-between align-items-center"
+                let leftDiv = document.createElement("div");
+                leftDiv.className = "text-truncate"
+                let rightDiv = document.createElement("div");
+                rightDiv.className = "d-flex"
+                let checkbox = document.createElement('input');
+                checkbox.type = 'checkbox';
+                checkbox.className = 'form-check-input mx-2'
+                checkbox.addEventListener('change', async () => {
+                    await set(ref(db, `tasks/${selectedGroup}/${item.key}`), { ...item.val(), "completed": !item.val().completed })
+                    loadUrl();
+                })
+                let a = document.createElement("a");
+                a.textContent = replaceVariable(item.val().url);
+                a.classList.add("text-decoration-none")
+                a.addEventListener('click', () => openUrls(item.val().url))
+                if (item.val().completed) {
+                    a.classList.add("text-decoration-line-through")
+                    checkbox.checked = true;
+                }
+                let p = document.createElement("div");
+                p.className = "bg-dark text-white";
+                p.innerText = millisToDDMMYY(item.val().endDate);
+                let date = document.createElement('input');
+                date.type = 'date';
+                date.classList.add("date")
+                date.classList.add("bg-dark")
+                date.classList.add("text-white")
+                date.addEventListener('input', async (event) => {
+                    let selectedDate = '';
+                    let today = new Date().getTime();
+                    if (event.target.value != '') {
+                        selectedDate = new Date(date.value).getTime();
+                    }
+                    await set(ref(db, `tasks/${selectedGroup}/${item.key}`), { ...item.val(), "endDate": selectedDate })
+                    loadUrl();
+                })
+                if (item.val().endDate == '' || item.val().endDate == undefined) {
+                    a.classList.add("normal");
+                } else if (item.val().endDate < today) {
+                    a.classList.add("danger");
+                } else if (daysBetweenMillis(item.val().endDate, today) < 5) {
+                    a.classList.add("warning")
+                } else {
+                    a.classList.add("normal")
+                }
+                let moveUpButton = document.createElement("button");
+                moveUpButton.className = "btn btn-sm btn-dark p-1"
+                moveUpButton.innerHTML = '<i class="material-icons">arrow_upward</i>'
+                moveUpButton.addEventListener('click', async () => {
+                    for (let i = 0; i < listOfKeys.length; i++) {
+                        if (item.key == listOfKeys[i]) {
+                            if (i == 0) {
+                                return;
+                            }
+                            await set(ref(db, `tasks/${selectedGroup}/${listOfKeys[i - 1]}`), listOfUrls[i]);
+                            await set(ref(db, `tasks/${selectedGroup}/${listOfKeys[i]}`), listOfUrls[i - 1]);
+                            loadUrl();
+                        }
+                    }
+                })
+                let moveDownButton = document.createElement("button");
+                moveDownButton.className = "btn btn-sm btn-dark p-1"
+                moveDownButton.innerHTML = '<i class="material-icons">arrow_downward</i>'
+                moveDownButton.addEventListener('click', async () => {
+                    for (let i = 0; i < listOfKeys.length; i++) {
+                        if (item.key == listOfKeys[i]) {
+                            if (i == listOfKeys.length - 1) {
+                                return;
+                            }
+                            await set(ref(db, `tasks/${selectedGroup}/${listOfKeys[i + 1]}`), listOfUrls[i]);
+                            await set(ref(db, `tasks/${selectedGroup}/${listOfKeys[i]}`), listOfUrls[i + 1]);
+                            loadUrl();
+                        }
+                    }
+                })
+                let deleteButton = document.createElement("button");
+                deleteButton.className = "btn btn-sm btn-dark text-danger p-1"
+                deleteButton.innerHTML = '<i class="material-icons">delete</i>'
+                deleteButton.addEventListener('click', async () => {
+                    await remove(ref(db, `tasks/${selectedGroup}/${item.key}`))
+                    loadUrl();
+                })
+                leftDiv.appendChild(checkbox);
+                leftDiv.appendChild(a);
+                rightDiv.appendChild(p);
+                rightDiv.appendChild(date);
+                rightDiv.appendChild(moveUpButton);
+                rightDiv.appendChild(moveDownButton);
+                rightDiv.appendChild(deleteButton);
+                li.appendChild(leftDiv);
+                li.appendChild(rightDiv);
+                urlList.appendChild(li);
+            });
+        }
+
+        function saveVariable(url) {
+            let left = url.indexOf('{');
+            let mid = url.indexOf(':', left);
+            let right = url.indexOf('}', mid);
+
+            if (left < 0 || mid < 0 || right < 0) {
+                return url;
+            }
+
+            let key = url.substring(left + 1, mid);
+            let value = url.substring(mid + 1, right);
+            localStorage.setItem(key, value);
+            url = url.replace(":" + value, "");
+            return url;
+        }
+
+        function replaceVariable(url) {//example "https://github.com/{key:value}/Gitcoin/edit/main/jan.py"
+            if (url.indexOf("{") >= 0) {
+                let key = url.substring(url.indexOf("{") + 1, url.indexOf("}"));
+                let value = localStorage.getItem(key);
+
+                let regex = new RegExp("\\{" + key + "\\}", "g");
+                url = url.replace(regex, value);
+            }
+            return url;
+        }
+
+        function openUrls() {
+            if (arguments.length === 0) {
+                for (let i = 0; i < listOfUrls.length; i++) {
+                    if (listOfUrls[i].url.startsWith("http") && listOfUrls[i].completed == false) {
+                        window.open(replaceVariable(listOfUrls[i].url), '_blank');
+                    }
+                }
+                return;
+            }
+            if (arguments.length === 1) {
+                if (arguments[0].startsWith("http")) {
+                    window.open(replaceVariable(arguments[0]), '_blank');
+                }
+            }
+        }
+
+        function getGas() {
+            fetch('https://api.etherscan.io/api?module=gastracker&action=gasoracle&apikey=2M1WXTYFPYCYJ4HMB4BJ61EIUI8JTZ8C9H')
+                .then(response => response.json())
+                .then(data => {
+                    document.title = data.result.ProposeGasPrice + " Gwei"
+                    document.getElementById("gwei").innerText = "Average Gwei = " + data.result.ProposeGasPrice;
+                })
+                .catch(error => console.error('Error:', error));
+        }
+
+        function millisToDDMMYY(millis) {
+            if (millis == undefined || millis == '') {
+                return ""
+            }
+            var date = new Date(millis);
+            var day = ('0' + date.getDate()).slice(-2);
+            var month = ('0' + (date.getMonth() + 1)).slice(-2);
+            var year = date.getFullYear().toString().substr(-2);
+            return day + '/' + month + '/' + year;
+        }
+
+        function daysBetweenMillis(date1_ms, date2_ms) {
+            const ONE_DAY = 1000 * 60 * 60 * 24;
+            var difference_ms = Math.abs(date1_ms - date2_ms);
+            return Math.round(difference_ms / ONE_DAY);
+        }
+
+        function checkIfExists(url) {
+            for (let i = 0; i < listOfUrls.length; i++) {
+                if (listOfUrls[i].url == url) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/js/bootstrap.bundle.min.js"
+        integrity="sha384-MrcW6ZMFYlzcLA8Nl+NtUVF0sA7MsXsP1UyJoMp4YLEuNSfAP+JcXn/tWtIaxVXM"
+        crossorigin="anonymous"></script>
 </body>
+
 </html>
